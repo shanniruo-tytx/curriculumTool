@@ -1,32 +1,46 @@
-import sqlite3
-import tabula  # 用于从PDF提取表格数据
+import pdfplumber
+import mysql.connector
+import uuid
+import numpy as np
+# 连接到MySQL数据库
+db_connection = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="123456",
+    database="test",
+    use_unicode=True,  # 添加use_unicode参数
+    charset="utf8mb4"     # 添加charset参数
+)
+cursor = db_connection.cursor()
 
-# 提取表格数据并保存为DataFrame
-pdf_path = "path/to/your/pdf_file.pdf"
-tables = tabula.read_pdf(pdf_path, pages="all", multiple_tables=True)
+# 打开PDF文件
+target_pages = [9,10,11]  # 例如，提取第1、2、3页的数据
+with pdfplumber.open("C:/Users/Administrator/Desktop/data.pdf") as pdf:
+    for page_number, page in enumerate(pdf.pages, start=1):
+        if page_number in target_pages:
+            table = page.extract_table()
+            arr = np.array(table)
+            #print(table)
+            #print(arr.shape)
+            #print(len(table))
+            # 处理表格数据并插入到数据库
+            middle_columns = arr[:, 1:4]  # 选择第2到第4列（索引1到3）  
+            print(middle_columns)             
+            # 处理表格数据并插入到数据库
+            for row in middle_columns[1:]:
+                print(row)
+                col1, col2, col3 = row
+                #todo 处理节次string拆分
+                id=uuid.uuid1()
+                #query = "INSERT INTO curriculum (id,curriculum_classroom, curriculum_name, weekdate) VALUES (%s,%s, %s, %s)"
+                #values = (str(id),col1, col2, col3)
+                #cursor.execute(query, values)
 
-# 假设你从表格中提取了以下列：name, age, email
-# 清洗数据并转换为列表
-data = []
-for table in tables:
-    for row in table.values:
-        if len(row) == 3:  # 假设表格有3列
-            name, age, email = row
-            data.append((name.strip(), int(age), email.strip()))
+                query = f"INSERT INTO curriculum (id, curriculum_classroom, curriculum_name, weekdate) VALUES ('{id}', '{col1}', '{col2}', '{col3}')"
+                print(query)
+                cursor.execute(query)
+                db_connection.commit()
 
-# 连接到SQLite数据库
-db_conn = sqlite3.connect("your_database.db")
-db_cursor = db_conn.cursor()
-
-# 创建表格
-db_cursor.execute("CREATE TABLE IF NOT EXISTS users (name TEXT, age INTEGER, email TEXT)")
-
-# 插入数据
-for record in data:
-    db_cursor.execute("INSERT INTO users (name, age, email) VALUES (?, ?, ?)", record)
-
-# 提交更改并关闭连接
-db_conn.commit()
-db_conn.close()
-
-print("Data has been inserted into the database.")
+# 关闭数据库连接
+cursor.close()
+db_connection.close()
